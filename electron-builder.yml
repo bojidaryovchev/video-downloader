@@ -1,0 +1,41 @@
+appId: com.bojidaryovchev.videodownloader
+productName: Video Downloader
+copyright: Copyright © 2026 bojidaryovchev
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**
+  - package.json
+
+# yt-dlp and ffmpeg are copied in verbatim so the shipped app needs nothing preinstalled.
+extraResources:
+  - from: resources/bin/${os}
+    to: bin
+    filter:
+      - '**/*'
+      - '!.gitkeep'
+
+compression: maximum
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-Setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+  # Unpack to a stable folder so repeat launches do not re-extract ~150 MB every time.
+  unpackDirName: VideoDownloader
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Video Downloader

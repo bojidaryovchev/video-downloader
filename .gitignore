@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Bundled third-party binaries are fetched at build time, not committed
+# Excluding the directory itself would stop git descending into it, so the
+# negation below could never re-include the placeholder. Match files only.
+resources/bin/*/*
+!resources/bin/*/.gitkeep
