@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { ffmpegLocation, ytdlpPath } from './binaries'
+import { ffmpegLocation, ytdlpPath, ytdlpPluginDir } from './binaries'
 import type { Progress } from '../shared/types'
 
 const MARK_PROGRESS = '@@P@@'
@@ -16,6 +16,18 @@ const ANSI_RE = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*[A-Za-z]', 'g')
 
 function childEnv(): NodeJS.ProcessEnv {
   return { ...process.env, PYTHONIOENCODING: 'utf-8', NO_COLOR: '1' }
+}
+
+// The bundled yt-dlp.exe is a PyInstaller build, which ignores PYTHONIOENCODING and
+// writes in the Windows ANSI code page (e.g. cp1251). Characters outside that code page
+// were dropped or garbled, so file names with accents, emoji, CJK, or the full-width
+// lookalikes yt-dlp substitutes for | ? * came back as paths that don't exist.
+const ENCODING_ARGS = ['--encoding', 'utf-8']
+
+/** Load our bundled yt-dlp plugins (site fixes) for both metadata and downloads. */
+function pluginArgs(): string[] {
+  const dir = ytdlpPluginDir()
+  return dir ? ['--plugin-dirs', dir] : []
 }
 
 /** Splits a stream into lines and hands each one to `onLine`, keeping any partial tail. */
@@ -152,7 +164,16 @@ function summarizeError(stderr: string, code: number | null): string {
 }
 
 export async function fetchMetadata(url: string, signal?: AbortSignal): Promise<Metadata> {
-  const args = ['-J', '--no-playlist', '--no-warnings', '--no-progress', '--ignore-config', url]
+  const args = [
+    '-J',
+    '--no-playlist',
+    '--no-warnings',
+    '--no-progress',
+    '--ignore-config',
+    ...ENCODING_ARGS,
+    ...pluginArgs(),
+    url
+  ]
 
   const child = spawn(ytdlpPath(), args, { windowsHide: true, env: childEnv() })
 
@@ -239,6 +260,7 @@ export function startDownload(options: DownloadOptions, handlers: DownloadHandle
 
   const args = [
     '--ignore-config',
+    ...ENCODING_ARGS,
     '--no-playlist',
     '--newline',
     '--progress',
@@ -258,6 +280,7 @@ export function startDownload(options: DownloadOptions, handlers: DownloadHandle
     '--output',
     options.outputTemplate,
     ...(ffmpegDir ? ['--ffmpeg-location', ffmpegDir] : []),
+    ...pluginArgs(),
     options.url
   ]
 

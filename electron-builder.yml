@@ -17,6 +17,12 @@ extraResources:
     filter:
       - '**/*'
       - '!.gitkeep'
+  # Our yt-dlp plugins (site fixes), loaded with --plugin-dirs. See README.
+  - from: resources/yt-dlp-plugins
+    to: yt-dlp-plugins
+    filter:
+      - '**/*'
+      - '!**/__pycache__/**'
 
 compression: maximum
 

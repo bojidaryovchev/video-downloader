@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { BinariesInfo, QueueItem, Settings } from '@shared/types'
 import UrlInput from './components/UrlInput'
 import QueueCard from './components/QueueCard'
 import SettingsPanel from './components/SettingsPanel'
+import StatusFilter, {
+  countByFilter,
+  emptyMessage,
+  matchesFilter,
+  type StatusFilterKey
+} from './components/StatusFilter'
 import { DownloadIcon, GearIcon, PlayIcon, StopIcon, TrashIcon } from './components/Icons'
 
 const STARTABLE: QueueItem['status'][] = ['ready', 'canceled', 'error']
@@ -41,6 +47,14 @@ export default function App(): JSX.Element {
   const [binaries, setBinaries] = useState<BinariesInfo | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [filter, setFilter] = useState<StatusFilterKey>('all')
+  const listRef = useRef<HTMLElement>(null)
+
+  // A new view starts at its top, not at wherever the previous one was scrolled.
+  const selectFilter = useCallback((key: StatusFilterKey): void => {
+    setFilter(key)
+    listRef.current?.scrollTo({ top: 0 })
+  }, [])
 
   useEffect(() => {
     void window.api.settings.get().then(setSettings)
@@ -58,23 +72,29 @@ export default function App(): JSX.Element {
 
   const counts = useMemo(
     () => ({
-      total: items.length,
       startable: items.filter((item) => STARTABLE.includes(item.status)).length,
       active: items.filter((item) => ACTIVE.includes(item.status)).length,
       finished: items.filter((item) => FINISHED.includes(item.status)).length,
-      completed: items.filter((item) => item.status === 'completed').length
+      byFilter: countByFilter(items)
     }),
     [items]
   )
 
+  const visibleItems = useMemo(
+    () => items.filter((item) => matchesFilter(item, filter)),
+    [items, filter]
+  )
+
   const handleAdd = useCallback(async (text: string): Promise<void> => {
     const result = await window.api.queue.add(text)
+    // Show what was just added, whichever view was open.
+    if (result.added) selectFilter('all')
     const parts: string[] = []
     if (result.added) parts.push(`Added ${result.added} link${result.added === 1 ? '' : 's'}`)
     if (result.duplicates) parts.push(`${result.duplicates} already queued`)
     if (result.invalid.length) parts.push(`${result.invalid.length} not a valid URL`)
     setNotice(parts.join(' · ') || null)
-  }, [])
+  }, [selectFilter])
 
   const updateSettings = useCallback(async (patch: Partial<Settings>): Promise<void> => {
     setSettings(await window.api.settings.set(patch))
@@ -141,13 +161,14 @@ export default function App(): JSX.Element {
         {notice && <p className="mt-2 text-xs text-slate-400">{notice}</p>}
       </div>
 
-      <div className="flex items-center justify-between gap-4 border-b border-[#1f2a3d] px-5 py-2.5">
-        <p className="text-xs text-slate-500">
-          {counts.total === 0
-            ? 'Nothing queued'
-            : `${counts.total} item${counts.total === 1 ? '' : 's'} · ${counts.active} running · ${counts.completed} done`}
-        </p>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[#1f2a3d] px-5 py-2.5">
+        {items.length === 0 ? (
+          <p className="text-xs text-slate-500">Nothing queued</p>
+        ) : (
+          <StatusFilter value={filter} counts={counts.byFilter} onChange={selectFilter} />
+        )}
+        {/* ml-auto keeps the actions right-aligned when a narrow window wraps the row */}
+        <div className="ml-auto flex items-center gap-2">
           <ToolbarButton
             primary
             icon={<PlayIcon className="size-4" />}
@@ -173,7 +194,7 @@ export default function App(): JSX.Element {
         </div>
       </div>
 
-      <main className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <main ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {items.length === 0 ? (
           <div className="grid h-full place-items-center text-center">
             <div>
@@ -184,9 +205,22 @@ export default function App(): JSX.Element {
               </p>
             </div>
           </div>
+        ) : visibleItems.length === 0 ? (
+          <div className="grid h-full place-items-center text-center">
+            <div>
+              <p className="text-sm text-slate-400">{emptyMessage(filter)}</p>
+              <button
+                type="button"
+                onClick={() => selectFilter('all')}
+                className="mt-2 text-xs text-sky-400 hover:text-sky-300 hover:underline"
+              >
+                Show all {items.length} item{items.length === 1 ? '' : 's'}
+              </button>
+            </div>
+          </div>
         ) : (
           <ul className="flex flex-col gap-2.5">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <QueueCard
                 key={item.id}
                 item={item}

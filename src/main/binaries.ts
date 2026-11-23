@@ -78,6 +78,18 @@ export function ffmpegPath(): string {
   return resolveBinary('ffmpeg').path
 }
 
+/**
+ * yt-dlp plugins we ship (resources/yt-dlp-plugins), passed with `--plugin-dirs`.
+ * Kept outside the bin folder so they still apply to a yt-dlp the updater put in
+ * userData. Null when absent: yt-dlp refuses to start if given a missing directory.
+ */
+export function ytdlpPluginDir(): string | null {
+  const dir = app.isPackaged
+    ? join(process.resourcesPath, 'yt-dlp-plugins')
+    : join(app.getAppPath(), 'resources', 'yt-dlp-plugins')
+  return existsSync(dir) ? dir : null
+}
+
 /** yt-dlp wants the *directory* holding ffmpeg/ffprobe, not the executable itself. */
 export function ffmpegLocation(): string | null {
   const { path, source } = resolveBinary('ffmpeg')

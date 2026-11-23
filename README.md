@@ -71,6 +71,48 @@ demanding license to redistribute. Everything yt-dlp needs — muxing, remuxing,
 extraction — is present in the LGPL build; only GPL-only *encoders* like x264 are missing,
 and downloading never re-encodes.
 
+## Site fixes (yt-dlp plugins)
+
+`resources/yt-dlp-plugins/` holds yt-dlp plugins for sites the current yt-dlp release can't
+handle yet. electron-builder ships the folder next to the binaries, and every yt-dlp run gets
+it via `--plugin-dirs`, so the plugins also apply to a yt-dlp pulled in by the updater.
+
+- **`kvs.py`** overrides parts of the generic extractor for KVS (Kernel Video Sharing)
+  sites. Pages that match none of these cases pass through unchanged.
+  - yt-dlp looks for embedded videos before it looks for a KVS player, and stops at the
+    first it finds. On x-x-x.tube that is an autoplaying ad clip in a `<video>` tag, which
+    yt-dlp downloaded instead of the video, with no error. When a page loads
+    `kt_player.js`, the plugin tries the KVS player first and falls back to yt-dlp's usual
+    order if that fails.
+  - yt-dlp titles KVS videos from the page's `<title>`. On x-x-x.tube that wraps the title in
+    SEO text ("Watch … XXX Porn Video in HD | X-X-X.tube"), so for that site the plugin uses
+    `og:title` instead.
+  - Newer KVS player builds (kt_player 2.7.x, e.g. x-fetish.tube) give the player config a
+    random name on each page load instead of `flashvars`, and yt-dlp fails with "Unable to
+    extract flashvars". The plugin finds the real name in the `kt_player(...)` call and
+    aliases it to `flashvars`.
+  - Some pages show a video from another site through an iframe in KVS's `embed-wrap` player
+    slot (old camwhores.tv videos, embedded from camvideos.org). The embed only shows its
+    player when the parent page is the Referer, so yt-dlp reported "Unsupported URL". When
+    nothing else is found on a page, the plugin follows that iframe with the page as Referer.
+- **`noodlemagazine.py`**: noodlemagazine.com answers yt-dlp's default HTTP client with 403
+  Forbidden. The plugin makes yt-dlp's NoodleMagazine extractor request pages with Chrome
+  impersonation (curl_cffi, bundled in the Windows yt-dlp build). Video files download
+  normally.
+- **`cam_archives.py`** adds extractors for archivebate.live and livecamrips.to. Neither
+  site, nor the file hosts they embed, is supported by yt-dlp. Each page embeds its video
+  from a file host in an iframe, and the plugin names the file after the model, platform
+  and show time. livecamrips pages are requested with Chrome impersonation, because
+  Cloudflare rejects yt-dlp's default client there. The hosts switch domains often, so the
+  plugin recognises each one by its player page rather than its URL:
+  - MixDrop: a packed script holds the direct MP4 URL. The file server rejects the
+    embedding site as Referer, so downloads send MixDrop's own player page instead.
+  - Uqload, and hosts with the same JW Player setup: a packed script holds an HLS playlist.
+  - Streamcash: a base64 JSON config holds an HLS playlist.
+
+Each plugin is a workaround. Once a yt-dlp release handles the site itself, delete the
+plugin. Run yt-dlp with `-v` to see which plugins loaded (`[debug] Extractor Plugins: ...`).
+
 ## Project layout
 
 ```
@@ -85,6 +127,9 @@ src/
   preload/        contextBridge API (sandboxed, no node in the renderer)
   renderer/       React UI
   shared/         types used by all three
+resources/
+  bin/<platform>/ yt-dlp + ffmpeg, fetched by fetch:bin (not committed)
+  yt-dlp-plugins/ yt-dlp plugins we maintain (site fixes)
 scripts/
   fetch-binaries.mjs
 ```
@@ -96,6 +141,11 @@ plus `--print after_move:@@F@@%(filepath)s` to learn the final filename. One wri
 knowing: `--print` implies `--quiet`, which suppresses the postprocessor banners — hence the
 explicit `--no-quiet` and a second `postprocess:` template, which is what drives the
 "Merging" state.
+
+yt-dlp also gets `--encoding utf-8`. The bundled `yt-dlp.exe` is a PyInstaller build, which
+ignores `PYTHONIOENCODING` and otherwise writes in the Windows ANSI code page. File names with
+characters outside that code page then came back mangled, so the app recorded paths that
+didn't exist and "Show in folder" failed for those downloads.
 
 Cancelling kills the whole process tree (`taskkill /T` on Windows). Killing only yt-dlp
 leaves an orphaned ffmpeg holding the output file open.
