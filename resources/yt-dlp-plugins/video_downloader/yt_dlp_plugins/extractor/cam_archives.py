@@ -73,17 +73,19 @@ class _HostedVideoIE(InfoExtractor):
                 'http_headers': referer,
             }
 
-        # Uqload and other XFileSharing-style JW Player setups
-        video_url = self._search_regex(
-            r'sources\s*:\s*\[\s*\{\s*file\s*:\s*"([^"]+)"', packed, 'video URL', default=None)
-        if video_url:
-            return {
-                'formats': self._hosted_formats(video_url, video_id, referer),
-                'thumbnail': self._search_regex(r'\bimage\s*:\s*"([^"]+)"', packed, 'thumbnail', default=None),
-                'duration': float_or_none(self._search_regex(
-                    r'\bduration\s*:\s*"?([\d.]+)', packed, 'duration', default=None)),
-                'http_headers': referer,
-            }
+        # XFileSharing-style JW Player setups: packed on Uqload, plain script on abstream
+        for script in (packed, player_page):
+            video_url = self._search_regex(
+                r'sources\s*:\s*\[\s*\{\s*file\s*:\s*"([^"]+)"', script, 'video URL', default=None)
+            if video_url:
+                return {
+                    'formats': self._hosted_formats(video_url, video_id, referer),
+                    'thumbnail': self._search_regex(
+                        r'\bimage\s*:\s*"([^"]+)"', script, 'thumbnail', default=None),
+                    'duration': float_or_none(self._search_regex(
+                        r'\bduration\s*:\s*"?([\d.]+)', script, 'duration', default=None)),
+                    'http_headers': referer,
+                }
 
         # Streamcash
         config = self._search_regex(
@@ -96,6 +98,11 @@ class _HostedVideoIE(InfoExtractor):
                 'http_headers': referer,
             }
 
+        # e.g. vinovo: the stream URL is only handed out in exchange for a reCAPTCHA token.
+        if re.search(r'google\.com/recaptcha/|grecaptcha', player_page):
+            raise ExtractorError(
+                f'This video host requires a CAPTCHA, which the downloader cannot pass: {player_url}',
+                expected=True)
         raise ExtractorError(f'Unsupported video host: {player_url}', expected=True)
 
     def _hosted_formats(self, video_url, video_id, headers):

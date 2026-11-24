@@ -107,8 +107,11 @@ it via `--plugin-dirs`, so the plugins also apply to a yt-dlp pulled in by the u
   plugin recognises each one by its player page rather than its URL:
   - MixDrop: a packed script holds the direct MP4 URL. The file server rejects the
     embedding site as Referer, so downloads send MixDrop's own player page instead.
-  - Uqload, and hosts with the same JW Player setup: a packed script holds an HLS playlist.
+  - Uqload, abstream, and hosts with the same JW Player setup: a script holds an HLS
+    playlist, packed on Uqload and plain on abstream.
   - Streamcash: a base64 JSON config holds an HLS playlist.
+  - Not supported: hosts that hand out the stream only in exchange for a CAPTCHA token
+    (vinovo). The error message says so.
 
 Each plugin is a workaround. Once a yt-dlp release handles the site itself, delete the
 plugin. Run yt-dlp with `-v` to see which plugins loaded (`[debug] Extractor Plugins: ...`).
