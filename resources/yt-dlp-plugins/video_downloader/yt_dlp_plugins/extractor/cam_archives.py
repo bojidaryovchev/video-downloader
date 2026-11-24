@@ -17,12 +17,15 @@ its URL:
 * Uqload, and other XFileSharing-style hosts: a packed script sets up JW
   Player with `sources: [{file: "...m3u8"}]`.
 * Streamcash: `window.__PCr` holds base64 JSON whose `src` is an HLS playlist.
+* vidara.to / czzbgnw.com: player config (HLS URL) fetched via JSON POST to
+  /api/stream. No CAPTCHA required. The iframe URL uses /e{code} (no slash).
 
 Titles read "<model> <platform> show <date> <time>", with dashes in the time
 because Windows forbids ':' in file names.
 """
 
 import base64
+import json
 import re
 
 from yt_dlp.extractor.common import InfoExtractor
@@ -35,9 +38,9 @@ from yt_dlp.utils import (
     urljoin,
 )
 
-# Every host seen so far serves its player from /e/<id>, /embed/<id> or /embed-<id>.html.
+# Hosts serve their player from /e/<id>, /e<id> (no slash), /embed/<id> or /embed-<id>.html.
 _PLAYER_IFRAME_RE = (
-    r'''<iframe[^>]+?\bsrc=["'](?P<url>(?:https?:)?//[^"']+/(?:e/|embed[/-])[^"']+)["']''')
+    r'''<iframe[^>]+?\bsrc=["'](?P<url>(?:https?:)?//[^"']+/(?:e/|e[0-9a-zA-Z]|embed[/-])[^"']*)["\']''')
 
 
 def _show_title(show):
@@ -97,6 +100,28 @@ class _HostedVideoIE(InfoExtractor):
                 'thumbnail': urljoin(player_url, config.get('pst')),
                 'http_headers': referer,
             }
+
+        # vidara.to / czzbgnw.com: player config (HLS URL) is loaded via JSON POST to /api/stream.
+        if re.search(r'''['"]/api/stream['"]''', player_page):
+            filecode = player_url.rstrip('/').rsplit('/', 1)[-1]
+            base_url = re.match(r'https?://[^/]+', player_url).group()
+            stream_data = self._download_json(
+                f'{base_url}/api/stream', video_id,
+                'Fetching stream data',
+                data=json.dumps({'filecode': filecode, 'device': 'desktop', 'codecs': []}).encode(),
+                headers={
+                    'Content-Type': 'application/json',
+                    'Origin': base_url,
+                    'Referer': player_url,
+                },
+            )
+            streaming_url = stream_data.get('streaming_url')
+            if streaming_url:
+                return {
+                    'formats': self._hosted_formats(streaming_url, video_id, referer),
+                    'thumbnail': stream_data.get('thumbnail'),
+                    'http_headers': referer,
+                }
 
         # e.g. vinovo: the stream URL is only handed out in exchange for a reCAPTCHA token.
         if re.search(r'google\.com/recaptcha/|grecaptcha', player_page):
