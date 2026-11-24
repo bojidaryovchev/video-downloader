@@ -35,6 +35,10 @@ export interface QueueItem {
   progress?: Progress
   filePath?: string
   error?: string
+  captchaUrl?: string
+  cookieFile?: string
+  streamUrl?: string
+  streamHeaders?: string[]
 }
 
 export interface Settings {

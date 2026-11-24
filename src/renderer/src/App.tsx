@@ -228,6 +228,7 @@ export default function App(): JSX.Element {
                 onCancel={(id) => void window.api.queue.cancel(id)}
                 onRemove={(id) => void window.api.queue.remove(id)}
                 onRetry={(id) => void window.api.queue.retryMetadata(id)}
+                onSolveCaptcha={(id) => void window.api.captcha.solve(id)}
                 onReveal={(path) => void window.api.system.reveal(path)}
                 onOpenFile={(path) => void window.api.system.openPath(path)}
                 onOpenSource={(url) => void window.api.system.openExternal(url)}

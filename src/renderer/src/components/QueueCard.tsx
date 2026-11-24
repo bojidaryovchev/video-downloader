@@ -8,6 +8,7 @@ import {
   FolderIcon,
   PlayIcon,
   RefreshIcon,
+  ShieldIcon,
   StopIcon,
   TrashIcon
 } from './Icons'
@@ -25,6 +26,7 @@ export interface QueueCardProps {
   onCancel: (id: string) => void
   onRemove: (id: string) => void
   onRetry: (id: string) => void
+  onSolveCaptcha: (id: string) => void
   onReveal: (path: string) => void
   onOpenFile: (path: string) => void
   onOpenSource: (url: string) => void
@@ -133,6 +135,7 @@ export default function QueueCard({
   onCancel,
   onRemove,
   onRetry,
+  onSolveCaptcha,
   onReveal,
   onOpenFile,
   onOpenSource
@@ -148,6 +151,7 @@ export default function QueueCard({
   const isActive = ACTIVE.includes(item.status)
   const canStart = STARTABLE.includes(item.status)
   const metadataMissing = item.status === 'error' && !item.title
+  const needsCaptcha = item.status === 'error' && !!item.captchaUrl
 
   return (
     <li className="flex gap-4 rounded-xl border border-[#1f2a3d] bg-[#121826] p-3 transition-colors hover:border-[#2a3a55]">
@@ -199,12 +203,21 @@ export default function QueueCard({
       </div>
 
       <div className="flex shrink-0 flex-col items-center gap-1">
-        {canStart && !metadataMissing && (
+        {canStart && !metadataMissing && !needsCaptcha && (
           <ActionButton label="Start download" tone="primary" onClick={() => onStart(item.id)}>
             <PlayIcon className="size-4" />
           </ActionButton>
         )}
-        {metadataMissing && (
+        {needsCaptcha && (
+          <ActionButton
+            label="Solve CAPTCHA"
+            tone="primary"
+            onClick={() => onSolveCaptcha(item.id)}
+          >
+            <ShieldIcon className="size-4" />
+          </ActionButton>
+        )}
+        {metadataMissing && !needsCaptcha && (
           <ActionButton label="Retry metadata" tone="primary" onClick={() => onRetry(item.id)}>
             <RefreshIcon className="size-4" />
           </ActionButton>

@@ -38,6 +38,9 @@ const api = {
     openPath: (target: string): Promise<string> => ipcRenderer.invoke('shell:open-path', target),
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:open-external', url),
     readClipboard: (): Promise<string> => ipcRenderer.invoke('clipboard:read')
+  },
+  captcha: {
+    solve: (id: string): Promise<void> => ipcRenderer.invoke('captcha:solve', id)
   }
 }
 

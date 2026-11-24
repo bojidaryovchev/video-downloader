@@ -163,7 +163,16 @@ function summarizeError(stderr: string, code: number | null): string {
   return lines[lines.length - 1] ?? `yt-dlp exited with code ${code ?? 'unknown'}`
 }
 
-export async function fetchMetadata(url: string, signal?: AbortSignal): Promise<Metadata> {
+export function parseCaptchaUrl(message: string): string | undefined {
+  const match = /CAPTCHA.*?:\s*(https?:\/\/\S+)/i.exec(message)
+  return match?.[1]?.replace(/[.,;!?]+$/, '')
+}
+
+export async function fetchMetadata(
+  url: string,
+  signal?: AbortSignal,
+  cookieFile?: string
+): Promise<Metadata> {
   const args = [
     '-J',
     '--no-playlist',
@@ -172,6 +181,7 @@ export async function fetchMetadata(url: string, signal?: AbortSignal): Promise<
     '--ignore-config',
     ...ENCODING_ARGS,
     ...pluginArgs(),
+    ...(cookieFile ? ['--cookies', cookieFile] : []),
     url
   ]
 
@@ -228,6 +238,11 @@ export interface DownloadOptions {
   url: string
   downloadDir: string
   outputTemplate: string
+  cookieFile?: string
+  /** Direct stream URL (m3u8/mpd) to download instead of going through the extractor. */
+  streamUrl?: string
+  /** Extra headers passed via --add-headers, each as "Name:Value". */
+  addHeaders?: string[]
 }
 
 export interface DownloadHandle {
@@ -281,7 +296,16 @@ export function startDownload(options: DownloadOptions, handlers: DownloadHandle
     options.outputTemplate,
     ...(ffmpegDir ? ['--ffmpeg-location', ffmpegDir] : []),
     ...pluginArgs(),
-    options.url
+    // When downloading a direct stream URL, bypass site-specific extractors
+    // (e.g. the KVS extractor matches vincdn.net and fails on direct video paths).
+    ...(options.streamUrl ? [
+      '--force-generic-extractor',
+      '--user-agent',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    ] : []),
+    ...(options.cookieFile ? ['--cookies', options.cookieFile] : []),
+    ...(options.addHeaders?.flatMap((h) => ['--add-headers', h]) ?? []),
+    options.streamUrl ?? options.url
   ]
 
   const child = spawn(ytdlpPath(), args, { windowsHide: true, env: childEnv() })

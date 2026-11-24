@@ -107,3 +107,10 @@ export const FilmIcon = (props: IconProps): JSX.Element => (
     <path d="M7 5v14M17 5v14M3 12h18M3 8.5h4M3 15.5h4M17 8.5h4M17 15.5h4" />
   </Icon>
 )
+
+export const ShieldIcon = (props: IconProps): JSX.Element => (
+  <Icon {...props}>
+    <path d="M12 3 4 7v5c0 4.4 3.4 8.5 8 9.5 4.6-1 8-5.1 8-9.5V7z" />
+    <path d="M9 12l2 2 4-4" />
+  </Icon>
+)

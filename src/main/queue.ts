@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { JsonStore } from './store'
-import { fetchMetadata, startDownload, YtDlpError, type DownloadHandle } from './ytdlp'
+import { fetchMetadata, parseCaptchaUrl, startDownload, YtDlpError, type DownloadHandle } from './ytdlp'
 import type { AddResult, QueueItem, Settings } from '../shared/types'
 
 /** How many metadata probes may run at once, independent of the download slots. */
@@ -157,6 +157,34 @@ export class DownloadQueue extends EventEmitter {
     void this.resolveMetadata(id)
   }
 
+  /** Resume a CAPTCHA-failed item using cookies extracted from the solver window. */
+  retryWithCookies(id: string, cookieFile: string): void {
+    const item = this.find(id)
+    if (!item || item.status !== 'error') return
+    this.patch(id, { status: 'fetching', error: undefined, captchaUrl: undefined, cookieFile })
+    this.changed()
+    void this.resolveMetadata(id)
+  }
+
+  /**
+   * Resume a CAPTCHA-failed item using a direct stream URL intercepted from the browser.
+   * Skips metadata re-fetch and immediately queues the download, since stream URLs can expire.
+   */
+  retryWithStream(id: string, streamUrl: string, cookieFile: string | undefined, streamHeaders: string[]): void {
+    const item = this.find(id)
+    if (!item || item.status !== 'error') return
+    this.patch(id, {
+      status: 'queued',
+      error: undefined,
+      captchaUrl: undefined,
+      cookieFile,
+      streamUrl,
+      streamHeaders
+    })
+    this.changed()
+    this.pump()
+  }
+
   /** Re-evaluate free slots — call after `concurrency` changes. */
   refresh(): void {
     this.pump()
@@ -214,7 +242,7 @@ export class DownloadQueue extends EventEmitter {
     this.metaRunning += 1
 
     try {
-      const meta = await fetchMetadata(item.url, controller.signal)
+      const meta = await fetchMetadata(item.url, controller.signal, item.cookieFile)
       if (!this.find(id)) return
 
       const autoStart = this.getSettings().autoStart
@@ -227,7 +255,7 @@ export class DownloadQueue extends EventEmitter {
         this.patch(id, { status: 'canceled' })
       } else {
         const message = err instanceof YtDlpError ? err.message : String(err)
-        this.patch(id, { status: 'error', error: message })
+        this.patch(id, { status: 'error', error: message, captchaUrl: parseCaptchaUrl(message) })
       }
       this.changed()
     } finally {
@@ -268,8 +296,11 @@ export class DownloadQueue extends EventEmitter {
     const handle = startDownload(
       {
         url: item.url,
+        streamUrl: item.streamUrl,
         downloadDir: settings.downloadDir,
-        outputTemplate: settings.outputTemplate
+        outputTemplate: settings.outputTemplate,
+        cookieFile: item.cookieFile,
+        addHeaders: item.streamHeaders
       },
       {
         onProgress: (progress) => {
@@ -302,9 +333,11 @@ export class DownloadQueue extends EventEmitter {
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
+        const isCanceled = message === 'Canceled'
         this.patch(id, {
-          status: message === 'Canceled' ? 'canceled' : 'error',
-          error: message === 'Canceled' ? undefined : message,
+          status: isCanceled ? 'canceled' : 'error',
+          error: isCanceled ? undefined : message,
+          captchaUrl: isCanceled ? undefined : parseCaptchaUrl(message),
           progress: undefined
         })
       })
